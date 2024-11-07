@@ -683,7 +683,7 @@ PropSimulation::PropSimulation(std::string name, real t0,
                 90.0L);  // https://ipnpr.jpl.nasa.gov/progress_report/42-196/196C.pdf
             // Moon.set_J2(
             //     2.0321568464952570e-4L, 269.9949L,
-            //     66.5392L);  // (fixed representation ONLY accurate at J2000 - see Table 2 in link for details.) https://doi.org/10.1007/s10569-010-9320-4
+            //     66.5392L);  // Table 2 in link for details: https://doi.org/10.1007/s10569-010-9320-4
             // because of our implementation of Legendre polynomials, we need to pad harmonic coefficients with zeros so that indexing is correct
             std::vector<real> moonJ = {
                 0.0L,
@@ -710,7 +710,7 @@ PropSimulation::PropSimulation(std::string name, real t0,
                 {0.0L, -3.5272289393243820e-6L,  1.7107886673430380e-7L,  2.8736257616334340e-7L,  5.2652110720146800e-10L, -6.7824035473995330e-9L,  0.0L},
                 {0.0L, -2.0453507141252220e-6L, -2.6966834353574270e-7L, -7.1063745295915780e-8L, -1.5361616966632300e-8L,  -8.3465073195142520e-9L,  1.6844213702632920e-9L}};
             Moon.set_harmonics(269.9949L, 66.5392L, 
-                2, 2, moonJ, moonC, moonS);
+                6, 6, moonJ, moonC, moonS);
             Sun.caTol = 0.25;
             MercuryBarycenter.caTol = 0.1;
             VenusBarycenter.caTol = 0.1;
