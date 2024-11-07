@@ -705,7 +705,7 @@ void euler313_to_rotMat(const real euler[6], real *rotMat, real *rotMatDot){
  * @param[out] xformMat Rotation matrix from 'from' to 'to'.
  */
 void get_pck_rotMat(const std::string &from, const std::string &to,
-                    const real &t0_mjd, PckEphemeris &ephem,
+                    const real &t0_mjd, const PckEphemeris &ephem,
                     std::vector<std::vector<real>> &xformMat) {
     // trivial case
     if (from == to){

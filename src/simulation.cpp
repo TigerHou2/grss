@@ -522,6 +522,9 @@ PropSimulation::PropSimulation(std::string name, real t0,
             Earth.set_J2(
                 0.00108262545L, 0.0L,
                 90.0L);  // https://ipnpr.jpl.nasa.gov/progress_report/42-196/196C.pdf
+            Moon.set_J2(
+                2.0321568464952570e-4L, 269.9949L,
+                66.5392L);  // (fixed representation ONLY accurate at J2000 - see Table 2 in link for details.) https://doi.org/10.1007/s10569-010-9320-4
             Sun.caTol = 0.25;
             MercuryBarycenter.caTol = 0.1;
             VenusBarycenter.caTol = 0.1;
@@ -678,6 +681,36 @@ PropSimulation::PropSimulation(std::string name, real t0,
             Earth.set_J2(
                 1.0826253900000000e-03L, 0.0L,
                 90.0L);  // https://ipnpr.jpl.nasa.gov/progress_report/42-196/196C.pdf
+            // Moon.set_J2(
+            //     2.0321568464952570e-4L, 269.9949L,
+            //     66.5392L);  // (fixed representation ONLY accurate at J2000 - see Table 2 in link for details.) https://doi.org/10.1007/s10569-010-9320-4
+            // because of our implementation of Legendre polynomials, we need to pad harmonic coefficients with zeros so that indexing is correct
+            std::vector<real> moonJ = {
+                0.0L,
+                0.0L,
+                2.0321568464952570e-4L, 
+                8.4597026974594570e-6L,
+               -9.7044138365700000e-6L,
+                7.4221608384052890e-7L,
+               -1.3767531350969900e-5L};
+            std::vector<std::vector<real>> moonC = {
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L,  2.8480741195592860e-5L,  4.8449420619770600e-6L,  1.6756178134114570e-6L,  0.0L, 0.0L, 0.0L},
+                {0.0L, -5.7048697319733210e-6L, -1.5912271792977430e-6L, -8.0678881596778210e-8L, -1.2692158612216040e-7L,  0.0L, 0.0L},
+                {0.0L, -8.6629769308983560e-7L,  7.1199537967353330e-7L,  1.5399750424904520e-8L,  2.1444704319218450e-8L,  7.6596153884006140e-8L,  0.0L},
+                {0.0L,  1.2024363601545920e-6L, -5.4703897324156850e-7L, -6.8785612757292010e-8L,  1.2915580402925160e-9L,  1.1737698784460500e-9L, -1.0913395178881540e-9L}};
+            std::vector<std::vector<real>> moonS = {
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L},
+                {0.0L,  5.8915551555318640e-6L,  1.6844743962783900e-6L, -2.4742714379805760e-7L,  0.0L, 0.0L, 0.0L},
+                {0.0L,  1.5789202789245720e-6L, -1.5153915796731720e-6L, -8.0349266627431070e-7L,  8.2964257754075220e-8L,   0.0L, 0.0L},
+                {0.0L, -3.5272289393243820e-6L,  1.7107886673430380e-7L,  2.8736257616334340e-7L,  5.2652110720146800e-10L, -6.7824035473995330e-9L,  0.0L},
+                {0.0L, -2.0453507141252220e-6L, -2.6966834353574270e-7L, -7.1063745295915780e-8L, -1.5361616966632300e-8L,  -8.3465073195142520e-9L,  1.6844213702632920e-9L}};
+            Moon.set_harmonics(269.9949L, 66.5392L, 
+                2, 2, moonJ, moonC, moonS);
             Sun.caTol = 0.25;
             MercuryBarycenter.caTol = 0.1;
             VenusBarycenter.caTol = 0.1;

@@ -23,13 +23,19 @@ static void force_ppn_eih(const PropSimulation *propSim, std::vector<real> &accI
 /**
  * @brief Compute the acceleration of the system due to the J2 zonal harmonic.
  */
-static void force_J2(const PropSimulation *propSim,
+static void force_J2(const real &t, const PropSimulation *propSim,
               std::vector<real> &accInteg, STMParameters* allSTMs);
+
+/**
+ * @brief Compute the lunar pole and meridian z-x-z Euler angles.
+ */
+static void get_lunar_pole_and_meridian(const real &t, 
+        real &poleRA, real &poleDec, real &W);
 
 /**
  * @brief Compute the acceleration of the system due to a full spherical harmonic model.
  */
-static void force_harmonics(const PropSimulation *propSim, std::vector<real> &accInteg);
+static void force_harmonics(const real &t, const PropSimulation *propSim, std::vector<real> &accInteg);
 
 /**
  * @brief Compute the acceleration of the system due to the nongravitational forces.
@@ -123,8 +129,8 @@ void get_state_der(PropSimulation *propSim, const real &t,
     force_newton(propSim, accInteg, allSTMs);
     // force_ppn_simple(propSim, accInteg, allSTMs);
     force_ppn_eih(propSim, accInteg, allSTMs);
-    force_J2(propSim, accInteg, allSTMs);
-    force_harmonics(propSim, accInteg);
+    force_J2(t, propSim, accInteg, allSTMs);
+    force_harmonics(t, propSim, accInteg);
     force_nongrav(propSim, accInteg, allSTMs);
     force_thruster(propSim, accInteg);
     force_continuous_event(t, propSim, accInteg, allSTMs);
@@ -449,7 +455,7 @@ static void force_ppn_eih(const PropSimulation *propSim, std::vector<real> &accI
  * @param[inout] accInteg State derivative vector.
  * @param[in] allSTMs STMParameters vector for IntegBodies in the simulation.
  */
-static void force_J2(const PropSimulation *propSim, std::vector<real> &accInteg,
+static void force_J2(const real &t, const PropSimulation *propSim, std::vector<real> &accInteg,
               STMParameters* allSTMs) {
 #ifdef PRINT_FORCES
     std::ofstream forceFile;
@@ -484,11 +490,43 @@ static void force_J2(const PropSimulation *propSim, std::vector<real> &accInteg,
                 const real cosRA = cos(poleRA);
                 const real sinDec = sin(poleDec);
                 const real cosDec = cos(poleDec);
-                const real dxBody = -dx * sinRA + dy * cosRA;
-                const real dyBody =
-                    -dx * cosRA * sinDec - dy * sinRA * sinDec + dz * cosDec;
-                const real dzBody =
-                    dx * cosRA * cosDec + dy * sinRA * cosDec + dz * sinDec;
+
+
+
+
+                std::string baseBodyFrame;
+                get_baseBodyFrame(bodyj->spiceId, t, baseBodyFrame);
+                std::vector<std::vector<real>> rotMat(6, std::vector<real>(6));
+                get_pck_rotMat("J2000", baseBodyFrame, t, propSim->pckEphem, rotMat);
+                rotMat.resize(3);
+                for (size_t row = 0; row < 3; row++) {
+                    rotMat[row].resize(3);
+                }
+                std::vector<real> dr = {dx, dy, dz};
+                std::vector<real> drBody(3);
+                mat_vec_mul(rotMat, dr, drBody);
+                const real dxBody = drBody[0];
+                const real dyBody = drBody[1];
+                const real dzBody = drBody[2];
+
+
+                // real poleRA = bodyj->poleRA;
+                // real poleDec = bodyj->poleDec;
+                // real W = 0.0;  // TODO: define this in set_harmonics
+                // if (bodyj->spiceId == 301) {
+                //     get_lunar_pole_and_meridian(t, poleRA, poleDec, W);
+                // }
+                // const real sinRA = sin(poleRA);
+                // const real cosRA = cos(poleRA);
+                // const real sinDec = sin(poleDec);
+                // const real cosDec = cos(poleDec);
+                // const real sinW = sin(W);
+                // const real cosW = cos(W);
+
+                // const real dxBody = cosDec*dz*sinW + dx*(-cosRA*sinDec*sinW - cosW*sinRA) + dy*(cosRA*cosW - sinDec*sinRA*sinW);
+                // const real dyBody = cosDec*cosW*dz + dx*(-cosRA*cosW*sinDec + sinRA*sinW) + dy*(-cosRA*sinW - cosW*sinDec*sinRA);
+                // const real dzBody = cosDec*cosRA*dx + cosDec*dy*sinRA + dz*sinDec;
+
                 const real fac1 =
                     3 * G * massj * bodyj->J2 * radius * radius / (2 * rRel5);
                 const real fac2 = 5 * dzBody * dzBody / rRel2 - 1;
@@ -505,11 +543,28 @@ static void force_J2(const PropSimulation *propSim, std::vector<real> &accInteg,
                     ayBody *= smoothing;
                     azBody *= smoothing;
                 }
-                accInteg[starti + 0] += -axBody * sinRA -
-                    ayBody * cosRA * sinDec + azBody * cosRA * cosDec;
-                accInteg[starti + 1] += axBody * cosRA -
-                    ayBody * sinRA * sinDec + azBody * sinRA * cosDec;
-                accInteg[starti + 2] += ayBody * cosDec + azBody * sinDec;
+
+                std::vector<real> accBody = {axBody, ayBody, azBody};
+                std::vector<real> accJ2000(3);
+                std::vector<std::vector<real>> rotMatTrans(3, std::vector<real>(3));
+                mat3_inv(rotMat, rotMatTrans);
+                mat_vec_mul(rotMatTrans, accBody, accJ2000);
+                accInteg[starti + 0] += accJ2000[0];
+                accInteg[starti + 1] += accJ2000[1];
+                accInteg[starti + 2] += accJ2000[2];
+
+                // accInteg[starti + 0] += 
+                //     axBody*(-cosRA*sinDec*sinW - cosW*sinRA) + 
+                //     ayBody*(-cosRA*cosW*sinDec + sinRA*sinW) + 
+                //     azBody*cosDec*cosRA;
+                // accInteg[starti + 1] += 
+                //     axBody*(cosRA*cosW - sinDec*sinRA*sinW) + 
+                //     ayBody*(-cosRA*sinW - cosW*sinDec*sinRA) + 
+                //     azBody*cosDec*sinRA;
+                // accInteg[starti + 2] += 
+                //     axBody*cosDec*sinW + 
+                //     ayBody*cosDec*cosW + 
+                //     azBody*sinDec;
                 if (propSim->integBodies[i].propStm && rRel < 0.1) {
                     stm_J2(allSTMs[i], G*massj, bodyj->J2, dxBody,
                            dyBody, dzBody, radius, sinRA, cosRA, sinDec, cosDec,
@@ -532,6 +587,41 @@ static void force_J2(const PropSimulation *propSim, std::vector<real> &accInteg,
     #ifdef PRINT_FORCES
     forceFile.close();
     #endif
+}
+
+static void get_lunar_pole_and_meridian(const real &t, 
+        real &poleRA, real &poleDec, real &W) {
+    // t is in MJD TDB; convert to terms used by https://doi.org/10.1007/s10569-010-9320-4, Table 1
+    real d = t - 51544.5;
+    real T = d / 36525.0;
+    real E1 = (125.045 - 0.0529921 * d) * DEG2RAD;
+    real E2 = (250.089 - 0.1059842 * d) * DEG2RAD;
+    real E3 = (260.008 + 13.0120009 * d) * DEG2RAD;
+    real E4 = (176.625 + 13.3407154 * d) * DEG2RAD;
+    real E5 = (357.529 + 35999.0503 * d) * DEG2RAD;
+    real E6 = (311.589 + 26.4057084 * d) * DEG2RAD;
+    real E7 = (134.963 + 13.0649930 * d) * DEG2RAD;
+    real E8 = (276.617 + 0.3287146 * d) * DEG2RAD;
+    real E9 = (34.226 + 1.7484877 * d) * DEG2RAD;
+    real E10 = (15.134 - 0.1589763 * d) * DEG2RAD;
+    real E11 = (119.743 + 0.0036096 * d) * DEG2RAD;
+    real E12 = (239.961 + 0.1643573 * d) * DEG2RAD;
+    real E13 = (25.053 + 12.9590088 * d) * DEG2RAD;
+    poleRA = 269.9949 + 0.0031 * T - 3.8787 * sin(E1) - 0.1204 * sin(E2) +
+        0.0700 * sin(E3) - 0.0172 * sin(E4) + 0.0072 * sin(E5) - 
+        0.0052 * sin(E10) + 0.0043 * sin(E13);
+    poleDec = 66.5392 + 0.0130 * T + 1.5419 * cos(E1) + 0.0239 * cos(E2) -
+        0.0278 * cos(E3) + 0.0068 * cos(E4) - 0.0029 * cos(E6) +
+        0.0009 * cos(E7) + 0.0008 * cos(E10) - 0.0009 * cos(E13);
+    W = 38.3213 + 13.17635815 * d + 1.4e-12 * d * d +
+        3.5610 * sin(E1) + 0.1208 * sin(E2) - 0.0642 * sin(E3) +
+        0.0158 * sin(E4) + 0.0252 * sin(E5) - 0.0066 * sin(E6) -
+        0.0047 * sin(E7) - 0.0046 * sin(E8) + 0.0028 * sin(E9) +
+        0.0052 * sin(E10) + 0.0040 * sin(E11) + 0.0019 * sin(E12) +
+        0.0044 * sin(E13);
+    poleRA *= DEG2RAD;
+    poleDec *= DEG2RAD;
+    W *= DEG2RAD;
 }
 
 // next two functions from Tiger for full gravity models
@@ -561,7 +651,8 @@ static void associated_legendre_function(const real &phi, const size_t &N,
 // xi-zeta contains the rotational pole of the extended body
 // eta completes the right-handed system
 // THIS IS UNVALIDATED CODE RIGHT NOW!!!
-static void force_harmonics(const PropSimulation *propSim,
+static void force_harmonics(const real &t,
+                            const PropSimulation *propSim,
                             std::vector<real> &accInteg) {
     const real G = propSim->consts.G;
     size_t starti = 0;
@@ -575,24 +666,30 @@ static void force_harmonics(const PropSimulation *propSim,
             }
             const real massj = bodyj->mass;
             if (i != j && massj != 0.0 && bodyj->isHarmonic) {
-                throw std::runtime_error("force_harmonics not operational");
                 real GM = G * massj;
                 const real dx = propSim->integBodies[i].pos[0] - bodyj->pos[0];
                 const real dy = propSim->integBodies[i].pos[1] - bodyj->pos[1];
                 const real dz = propSim->integBodies[i].pos[2] - bodyj->pos[2];
                 const real rRel = sqrt(dx * dx + dy * dy + dz * dz);
                 const real rRel2 = rRel * rRel;
-                const real poleRA = bodyj->poleRA;
-                const real poleDec = bodyj->poleDec;
+
+                real poleRA = bodyj->poleRA;
+                real poleDec = bodyj->poleDec;
+                real W = 0.0;  // TODO: define this in set_harmonics
+                if (bodyj->spiceId == 301) {
+                    get_lunar_pole_and_meridian(t, poleRA, poleDec, W);
+                }
                 const real sinRA = sin(poleRA);
                 const real cosRA = cos(poleRA);
                 const real sinDec = sin(poleDec);
                 const real cosDec = cos(poleDec);
-                const real dxBody = -dx * sinRA + dy * cosRA;
-                const real dyBody =
-                    -dx * cosRA * sinDec - dy * sinRA * sinDec + dz * cosDec;
-                const real dzBody =
-                    dx * cosRA * cosDec + dy * sinRA * cosDec + dz * sinDec;
+                const real sinW = sin(W);
+                const real cosW = cos(W);
+
+                const real dxBody = cosDec*dz*sinW + dx*(-cosRA*sinDec*sinW - cosW*sinRA) + dy*(cosRA*cosW - sinDec*sinRA*sinW);
+                const real dyBody = cosDec*cosW*dz + dx*(-cosRA*cosW*sinDec + sinRA*sinW) + dy*(-cosRA*sinW - cosW*sinDec*sinRA);
+                const real dzBody = cosDec*cosRA*dx + cosDec*dy*sinRA + dz*sinDec;
+
                 const real phi = asin(dzBody / rRel);
                 const real lambda = atan2(dyBody, dxBody);
 
@@ -612,18 +709,27 @@ static void force_harmonics(const PropSimulation *propSim,
                     ayBody -= 0;
                     azBody -= GM / rRel2 * bodyj->J[n] * pow(bodyj->radius / rRel, n) * P[n][1]; // FIXME: verify that -cos(phi) * Pₙ' is just Pₙ¹; see https://en.wikipedia.org/wiki/Associated_Legendre_polynomials#Definition_for_non-negative_integer_parameters_%E2%84%93_and_m
                 }
-                for (size_t n = 2; n <= nTesseral; n++) {
-                    for (size_t m = 1; m <= n; m++) {
-                        axBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * (-1) * (n+1)   * P[n][m]                    * ( bodyj->C[n][m] * cos(m * lambda) + bodyj->S[n][m] * sin(m * lambda));
-                        ayBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * m * 1/cos(phi) * P[n][m]                    * (-bodyj->C[n][m] * sin(m * lambda) + bodyj->S[n][m] * cos(m * lambda));
-                        azBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * 0.5 * ((n+m)*(n-m+1)*P[n][m-1] - P[n][m+1]) * ( bodyj->C[n][m] * cos(m * lambda) + bodyj->S[n][m] * sin(m * lambda));
-                    }
-                }
-                accInteg[starti + 0] += -axBody * sinRA -
-                    ayBody * cosRA * sinDec + azBody * cosRA * cosDec;
-                accInteg[starti + 1] += axBody * cosRA -
-                    ayBody * sinRA * sinDec + azBody * sinRA * cosDec;
-                accInteg[starti + 2] += ayBody * cosDec + azBody * sinDec;
+                // for (size_t n = 2; n <= nTesseral; n++) {
+                //     for (size_t m = 1; m <= n; m++) {
+                //         axBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * (-1) * (n+1)   * P[n][m]                  * ( bodyj->C[n][m] * cos(m * lambda) + bodyj->S[n][m] * sin(m * lambda));
+                //         ayBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * m * 1/cos(phi) * P[n][m]                  * (-bodyj->C[n][m] * sin(m * lambda) + bodyj->S[n][m] * cos(m * lambda));
+                //         // azBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * 0.5 * ((n+m)*(n-m+1)*P[n][m-1] - P[n][m+1]) * ( bodyj->C[n][m] * cos(m * lambda) + bodyj->S[n][m] * sin(m * lambda));
+                //         azBody -= GM / rRel2 * pow(bodyj->radius / rRel, n) * (P[n][m+1] + m/cos(phi)*sin(phi)*P[n][m]) * ( bodyj->C[n][m] * cos(m * lambda) + bodyj->S[n][m] * sin(m * lambda));
+                //     }
+                // }
+
+                accInteg[starti + 0] += 
+                    axBody*(cosDec*cosRA*sin(phi) + (-cosRA*cosW*sinDec + sinRA*sinW)*sin(lambda)*cos(phi) + (-cosRA*sinDec*sinW - cosW*sinRA)*cos(lambda)*cos(phi)) + 
+                    ayBody*((-cosRA*cosW*sinDec + sinRA*sinW)*cos(lambda) - (-cosRA*sinDec*sinW - cosW*sinRA)*sin(lambda)) + 
+                    azBody*(cosDec*cosRA*cos(phi) - (-cosRA*cosW*sinDec + sinRA*sinW)*sin(lambda)*sin(phi) - (-cosRA*sinDec*sinW - cosW*sinRA)*sin(phi)*cos(lambda));
+                accInteg[starti + 1] += 
+                    axBody*(cosDec*sinRA*sin(phi) + (cosRA*cosW - sinDec*sinRA*sinW)*cos(lambda)*cos(phi) + (-cosRA*sinW - cosW*sinDec*sinRA)*sin(lambda)*cos(phi)) + 
+                    ayBody*(-(cosRA*cosW - sinDec*sinRA*sinW)*sin(lambda) + (-cosRA*sinW - cosW*sinDec*sinRA)*cos(lambda)) + 
+                    azBody*(cosDec*sinRA*cos(phi) - (cosRA*cosW - sinDec*sinRA*sinW)*sin(phi)*cos(lambda) - (-cosRA*sinW - cosW*sinDec*sinRA)*sin(lambda)*sin(phi));
+                accInteg[starti + 2] += 
+                    axBody*(cosDec*cosW*sin(lambda)*cos(phi) + cosDec*sinW*cos(lambda)*cos(phi) + sinDec*sin(phi)) + 
+                    ayBody*(cosDec*cosW*cos(lambda) - cosDec*sinW*sin(lambda)) + 
+                    azBody*(-cosDec*cosW*sin(lambda)*sin(phi) - cosDec*sinW*sin(phi)*cos(lambda) + sinDec*cos(phi));
             }
         }
         starti += propSim->integBodies[i].n2Derivs;

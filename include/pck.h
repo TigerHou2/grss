@@ -103,7 +103,7 @@ void euler313_to_rotMat(const real euler[6], real *rotMat, real *rotMatDot);
  * @brief Get the rotation matrix from one frame to another.
  */
 void get_pck_rotMat(const std::string &from, const std::string &to,
-                    const real &t0_mjd, PckEphemeris &ephem,
+                    const real &t0_mjd, const PckEphemeris &ephem,
                     std::vector<std::vector<real>> &xformMat);
 
 #endif
