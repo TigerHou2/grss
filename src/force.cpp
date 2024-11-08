@@ -638,9 +638,56 @@ static void associated_legendre_function(const real &phi, const int &N,
         }
     }
     // Pnm
+    // NOTE: associated Legendre functions are typically multiplied by (-1)^m, but for astrodynamics this is NOT the case
     for (int n = 1; n <= N; n++) {
         for (int m = 1; m <= n; m++) {
             P[n][m] = cosphi * sec_P[n][m];
+        }
+    }
+}
+
+// http://mitgcm.org/~mlosch/geoidcookbook/node11.html
+static void normalized_associated_legendre_function(const real &phi, const int &N,
+                                                    std::vector<std::vector<real>> &P,
+                                                    std::vector<real> &P0_der,
+                                                    std::vector<std::vector<real>> &sec_P,
+                                                    std::vector<std::vector<real>> &cos_P_der) {
+    const real t = sin(phi);
+    const real u = cos(phi);
+    P[0][0] = 1.0;
+    P[1][0] = sqrt(3.0) * t;
+    P[1][1] = sqrt(3.0) * u;
+    for (int m = 2; m <= N; m++) {
+        P[m][m] = u * sqrt((2 * m + 1) / (real)(2 * m)) * P[m - 1][m - 1];
+    }
+    for (int n = 2; n <= N; n++) {
+        for (int m = 0; m < n; m++) {
+            real a_nm = sqrt((2 * n - 1) * (2 * n + 1) / (real)(n - m) / (real)(n + m));
+            real b_nm = sqrt((2 * n + 1) * (n + m - 1) * (n - m - 1) / (real)(n - m) / (real)(n + m) / (real)(2 * n - 3));
+            P[n][m] = a_nm * t * P[n - 1][m] - b_nm * P[n - 2][m];
+        }
+    }
+    // P'
+    P0_der[1] = sqrt(3.0);
+    for (int n = 2; n <= N; n++) {
+        P0_der[n] = sqrt((2 * n + 1) / (real)(2 * n - 1)) * (t * P0_der[n-1] + n * P[n - 1][0]);
+    }
+    // sec(phi) * P
+    sec_P[1][1] = sqrt(3.0);
+    for (int n = 2; n <= N; n++) {
+        sec_P[n][n] = sqrt((2 * n + 1) / (real)(2 * n)) * u * sec_P[n - 1][n - 1];
+    }
+    for (int m = 1; m <= N; m++) {
+        for (int n = m+1; n <= N; n++) {
+            real fac1 = sqrt((2 * n + 1) * (2 * n - 1) / (real)(n + m) / (real)(n - m));
+            real fac2 = sqrt((2 * n + 1) * (n + m - 1) * (n - m - 1) / (real)(2 * n - 3) / (real)(n + m) / (real)(n - m));
+            sec_P[n][m] = fac1 * t * sec_P[n-1][m] - fac2 * sec_P[n-2][m];
+        }
+    }
+    // cos(phi) * P'
+    for (int n = 1; n <= N; n++) {
+        for (int m = 1; m <= n; m++) {
+            cos_P_der[n][m] = -n * t * sec_P[n][m] + sqrt((2 * n + 1) * (n + m) * (n - m) / (real)(2 * n - 1)) * sec_P[n-1][m];
         }
     }
 }
@@ -708,7 +755,8 @@ static void force_harmonics(const real &t,
                 std::vector<real> P0_der(nZonal+1, 0.0);
                 std::vector<std::vector<real>> sec_P(nZonal+1, std::vector<real>(nTesseral+1, 0.0));
                 std::vector<std::vector<real>> cos_P_der(nZonal+1, std::vector<real>(nTesseral+1, 0.0));
-                associated_legendre_function(phi, nZonal, P, P0_der, sec_P, cos_P_der);
+                // associated_legendre_function(phi, nZonal, P, P0_der, sec_P, cos_P_der);
+                normalized_associated_legendre_function(phi, nZonal, P, P0_der, sec_P, cos_P_der);
 
                 real axGreek = 0.0;  // acceleration in the xi-eta-zeta frame
                 real ayGreek = 0.0;
