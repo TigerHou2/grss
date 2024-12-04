@@ -203,6 +203,7 @@ docs/doxygen/*
 
 # VS code setup directory
 .vscode/
+*.code-workspace
 
 # C++ program debug symbols
 *.dSYM/
